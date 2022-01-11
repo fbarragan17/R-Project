@@ -1,0 +1,1067 @@
+---
+title: "Final Project Report"
+output: html_document
+author: 'Fatima Barragan (fbarraga), Karthik Konduru (kkonduru), Omar Almusa (oalmusa)'
+date: December 9, 2021
+---
+
+## Abstract
+
+We looked at publicly available data regarding the military coup of 2021 in Myanmar. We hypothesized that the most likely resistance to the coup would be concentrated in predominantly educated, urban centers.
+
+After cleaning the data to insure usability, we performed linear regression models to evaluate this hypothesis.
+
+We found that the percentage of population living in urban center per township was statistically significant and positively correlated with the incidence of detainment, imprisonment and death per township. We also used a second measure of adult literacy and found a statistically significant positive correlation between adult literacy and the rate of detainment, imprisonment and death per township.
+
+Finally, we also assumed that violent confrontations would be clustered near the beginning of the coup. Indeed, we found using the data from the conflicts table, the violent events had a slight lag coinciding with the beginning coup. The coup happened on 2/1/2021 and most of the violent reprisals occurred in March 2021 and tapered off.
+
+## Introduction
+Myanmar underwent a military coup following the victory of the National League of Democracy in the 2020 elections. Civilian protests against the coup resulted in a military suppression of the protests. The following focuses on which pockets of civilians bore the brunt of this suppression by the military. The data available is incomplete and inconsistent. We endeavored to provide a retrospective understanding of which population centers suffered the most during this coup.
+
+Our HYPOTHESIS: We want to investigate whether the suppression of the civilians protesting the coup is not statistically different in any population center regardless of the nature of the townships in which violence was visited (NULL hypothesis). We suspect that the violence would be concentrated in certain townships. We suspect that those population centers are more urban rather than rural. (Rejecting the NULL hypothesis).
+
+
+## Methods
+1.) We began with data cleaning which included finding a consistent column on which we could join/merge across the different tables.
+
+1a) cleaning was first performed on the detainees table and then merged with MIMU table on township information. Those rows which were not matched on township were put into the category ‘other’.
+
+1b) cleaning was then performed on the imprisoned table and then merged with MIMU table on township information. Those rows which were not matched on township were put into the category ‘other’.
+
+1c) cleaning was then performed on the fallen table and then merged with MIMU table on township information. Those rows which were not matched on township were put into the category ‘other’.
+
+***********************************************************************************************************************
+
+2.) Merged Conflicts table with the MIMU table.
+
+***********************************************************************************************************************
+
+PLEASE NOTE FOR READIABILITY PART 3 WAS PLACED ONLY IN THE RESULTS SECTION
+
+3.) Performed univariate, bivariate and trivariate anlayses.
+
+3a) Univariate analysis was performed on detainees.
+
+3b) Bivariate analysis with linear regression was performed on detainees (target variable) against percent of people living in urban population as percentage of total population per township.
+
+3c) Bivariate analysis with linear regression was then performed on detainees (target variable) against adult literacy rate.
+
+3d) Trivariate analysis with linear regression was performed on detainees (target variable) against BOTH urban population as percentage of total population per township and adult literacy rate.
+
+***********************************************************************************************************************
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(knitr)
+library(modelsummary)
+
+# Import starting data (AAPP)
+detainees = read_csv("https://www.andrew.cmu.edu/user/jweiss2/21f_r/94842/final_2021/detained.csv.gz")
+imprisoned = read_csv("https://www.andrew.cmu.edu/user/jweiss2/21f_r/94842/final_2021/imprisoned.csv.gz")
+fallen = read_csv("https://www.andrew.cmu.edu/user/jweiss2/21f_r/94842/final_2021/fallen.csv")
+
+```
+
+
+```{r, echo=FALSE, results='hide',include=FALSE, message=FALSE, warning=FALSE}
+#assign better names with out spaces 
+names(detainees)[5] <- 'FatherName'
+names(detainees)[7] <- 'DateOfArrest'
+names(detainees)[8] <- 'SectionOfLaw'
+names(detainees)[10] <- 'CurrentCondition'
+```
+
+```{r, echo=FALSE, results='hide',include=FALSE, message=FALSE, warning=FALSE}
+#pulling those with only M or F in sex column
+detainees <-  detainees %>%
+  filter(Sex == 'M' | Sex == 'F')
+```
+
+```{r, echo=FALSE, results='hide',include=FALSE, message=FALSE, warning=FALSE}
+
+#changing free text values in Age  
+detainees <- detainees %>%
+  mutate(`Age` = 
+           case_when(str_detect(`Age`, "Under") ~ '10',
+                     T ~ Age)) %>%
+  select_all()
+
+```
+
+
+```{r,echo=FALSE, results='hide',include=FALSE, message=FALSE, warning=FALSE}
+#turning Age to numeric values
+detainees[,4]<-sapply(detainees[,4],as.numeric)
+```
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+#changing free text values in Date of Arrest only keeping their first arrest if have multiple   
+detainees <- detainees %>%
+  mutate(`DateOfArrest` = 
+           case_when(str_detect(`DateOfArrest`, "1-Feb-21 and 7-\rFeb-21") ~ '1-Feb-21',
+                     str_detect(`DateOfArrest`, "1-Feb-21 and 9-\rMar-21" ) ~ '1-Feb-21',
+                     str_detect(`DateOfArrest`, "1-Feb-21 and 5-\rMar-21" ) ~ '1-Feb-21',
+                     str_detect(`DateOfArrest`, "1-Feb-21 and 5-\rFeb-21") ~ '1-Feb-21',
+                     str_detect(`DateOfArrest`, "1-Feb-21 and 10-\rFeb-21") ~ '1-Feb-21',
+                     str_detect(`DateOfArrest`, "1-Feb-21 and 8-\rFeb-21") ~ '1-Feb-21',
+                     str_detect(`DateOfArrest`, "1-Feb-21 and 9-\rFeb-21") ~ '1-Feb-21',
+                     str_detect(`DateOfArrest`, "1-Feb-21 & 18-\rOct-21") ~ '1-Feb-21',
+                     str_detect(`DateOfArrest`, "1-Feb-21 and 6-\rFeb-21") ~ '1-Feb-21',
+                     str_detect(`DateOfArrest`, "13-Aug-21 & 18-\rOct-21" ) ~ '13-Aug-21',
+                     str_detect(`DateOfArrest`, "b11e-rSep-21") ~ '11-Sep-21',
+                     str_detect(`DateOfArrest`, "n1g4w-Sae Tp-o2w1nship, Y" ) ~ '14-Sep-21',
+                     str_detect(`DateOfArrest`, "a1i1r-mNaonv-21") ~ '11-Nov-21',
+                     str_detect(`DateOfArrest`, "u1t1i-vNeov-21" ) ~ '11-Nov-21',
+                     str_detect(`DateOfArrest`, "u2t0iv-Ne ov-21"  ) ~ '2-Nov-21',
+                     str_detect(`DateOfArrest`, "m17b-Nerov-21" ) ~ '17-Nov-21',
+                     str_detect(`DateOfArrest`, "2c0u-tNivoev-21"  ) ~ '20-Nov-21',
+                     str_detect(`DateOfArrest`, "S3t-aOffct-21") ~ '3-Oct-21',
+                     str_detect(`DateOfArrest`, "a1c7h-Seerp-21"  ) ~ '17-Sep-21',
+                     str_detect(`DateOfArrest`, "a1c8h-Serep-21") ~ '18-Sep-21',
+                     str_detect(`DateOfArrest`, "3o-nNkov-21") ~ '3-Nov-21',
+                     str_detect(`DateOfArrest`, "9h-eNrov-21") ~ '9-Nov-21',
+                     str_detect(`DateOfArrest`, "1h2e-rNov-21") ~ '12-Nov-21',
+                     str_detect(`DateOfArrest`, "2h0e-rNov-21") ~ '20-Nov-21',
+                     str_detect(`DateOfArrest`, "26-May-21 and\r11-Jul-21" ) ~ '26-May-21',
+                     str_detect(`DateOfArrest`, "n1g1-aSnegpy-u2n1 Post Ne" ) ~ '11-Sep-21',
+                     str_detect(`DateOfArrest`, "21-Apr-21 & 3-No" ) ~ '21-Apr-21',
+                     str_detect(`DateOfArrest`, "1d4e-lNov-21") ~ '14-Nov-21',
+                     str_detect(`DateOfArrest`, "4r-icSuelpt-u2r1al Pharm") ~ '4-Sep-21',
+                     str_detect(`DateOfArrest`, "2y2o- MSeypi-n2t1 and Son") ~ '22-Sep-21',
+                     str_detect(`DateOfArrest`, "w2e2 -GSoelpd- 2 S1hop" ) ~ '22-Sep-21',
+                     str_detect(`DateOfArrest`, "t2a2y- GSeopld-2 S1hop Ow") ~ '22-Sep-21',
+                     str_detect(`DateOfArrest`, "2in2 -PSheopn-2e 1Shop O") ~ '22-Sep-21',
+                     str_detect(`DateOfArrest`,  "2  8   -  A  p   r  - 2   1") ~ '28-Apr-21',
+                     str_detect(`DateOfArrest`, "g1o4n-S Uenp-iv2e1rsit") ~ '14-Sep-21',
+                     str_detect(`DateOfArrest`, "1D4a-gSoenp -U2n1 iversity") ~ '14-Sep-21',
+                     str_detect(`DateOfArrest`, "D14a-gSoenp U-2n1iversit" ) ~ '14-Sep-21',
+                     str_detect(`DateOfArrest`, "1o4n- SUenpi-v2e1rsit") ~ '14-Sep-21',
+                     str_detect(`DateOfArrest`, ",1  6D-aSwepe-i 2U1niversit") ~ '16-Sep-21',
+                     str_detect(`DateOfArrest`,  "a3u0k-sSee Tp-e2c1hnologic") ~ '30-Sep-21',
+                     str_detect(`DateOfArrest`, ",2 T-Oaucnt-g2g1yi Medica") ~ '2-Oct-21',
+                     str_detect(`DateOfArrest`, "o2n- OUcnt-iv2e1rsit") ~ '2-Oct-21',
+                     str_detect(`DateOfArrest`,  "4h-nOoclto-g2i1cal Unive") ~ '4-Oct-21',
+                     str_detect(`DateOfArrest`, "4-Mar-21 & 19-\rOct-21" ) ~ '4-Mar-21',
+                     str_detect(`DateOfArrest`,  "12-Mar-21 & 1-\rNov-21") ~ '12-Mar-21',
+                     str_detect(`DateOfArrest`, "27-Mar-21 & 1-No"  ) ~ '27-Mar-21',
+                     str_detect(`DateOfArrest`,  "28-Mar-21 & 1-\rNov-21") ~ '28-Mar-21',
+                     str_detect(`DateOfArrest`, "2-May-21 and 19-\rOct-21" ) ~ '2-May-21',
+                     str_detect(`DateOfArrest`, "16-May-21&20-\rOct-21") ~ '16-May-21',
+                     str_detect(`DateOfArrest`, "22-May-21 & Oct") ~ '22-May-21',
+                     str_detect(`DateOfArrest`,  "22-May-21 & 18-\rOct-21") ~ '22-May-21',
+                     str_detect(`DateOfArrest`, "21-Jul-21 & Oct" ) ~ '21-Jul-21',
+                     str_detect(`DateOfArrest`, "24-Jul-21 & Oct-\r21" ) ~ '24-Jul-21',
+                     str_detect(`DateOfArrest`, "8vi-sOtct-21") ~ '8-Oct-21',
+                     str_detect(`DateOfArrest`, "5/28/2021 and\r13-Oct-21" ) ~ '28-May-21',
+                     str_detect(`DateOfArrest`, "5/29/2021 and\r13-Oct-21") ~ '29-May-21',
+                     str_detect(`DateOfArrest`, "Unknown Date & 2-Nov-21") ~ '2-Nov-21',
+                     str_detect(`DateOfArrest`, "r13-Nov-21" ) ~ '13-Nov-21',
+                     str_detect(`DateOfArrest`, "r22-Nov-21") ~ '22-Nov-21',
+                     str_detect(`DateOfArrest`, "Unknown Date & 1-Nov-21") ~ '1-Nov-21',
+                     T ~ DateOfArrest)) %>%
+  select_all()
+
+
+```
+
+
+
+### Cleaning detainee dataset
+
+1a)
+
+The detainee table was first assigned more clear column names. The Date of Arrest column had free text responses. The column was reassigned a date value based on the free text response. Similarly, Age was cleaned by assigning a singular numerical value. Lastly, the table was filtered for rows that had a sex assigned.
+
+The cleaner table is as follows:
+
+```{r, echo= FALSE}
+detainees 
+```
+
+The detainees table currently has `r nrow(detainees)` rows and `r ncol(detainees)` columns.
+
+
+From the following table we can see that there are a lot of missing data from various columns in our detainees data set This will limit the attributes we can use from the table for analysis.
+```{r, echo=FALSE}
+#checking for number of missing values in each column
+sapply(detainees, function(x) sum(is.na(x)))
+
+```
+
+
+### Merging detainee dataset with MIMU on township  
+The detainees table ‘Address’ was recorded as free text, so the values here may not be spelled correctly. The MIMU table township names are clean. Thus, using a Levenshtein distance approach we will found approximate matches at the township level for the detainees ‘Address’ column. This will increase consistency throughout our data sets. 
+
+Note: Those values which could not be matched with MIMU township were recorded as 'other'.
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+## Merging MIMU township with Detainees
+
+#The ACLED protests dataset is a derived dataset looking at protest-related events during 2021.  The MIMU data is in an excel #spreadsheet macro file, which you can browse yourself.  Below is code to convert into a nested data frame per indicator.
+
+# Indicators data
+# 1. protests (ACLED)
+conflicts = read_csv("https://www.andrew.cmu.edu/user/jweiss2/21f_r/94842/final_2021/conflicts.csv.gz")
+
+
+# 2. sectors (MIMU)
+## readxl doesn't read from urls, so this is a workaround:
+tmp = tempfile(fileext = ".xlsm")
+httr::GET(
+  url = "https://www.andrew.cmu.edu/user/jweiss2/21f_r/94842/final_2021/MIMU_BaselineData_AllSectors_Countrywide_18Mar2021_revised.xlsm", 
+  httr::write_disk(tmp)
+)
+sector.indicators = 
+  readxl::read_xlsx(tmp, sheet=3, skip = 5) %>% as_tibble()
+
+
+### Organize all sectors data to be given by nested tibbles per indicator
+sector.nest = sector.indicators %>% 
+  select(1:3, 
+         Indicator_Name, Indicator_Type, Sector, Unit, 
+         starts_with("20"), Source_Name) %>%
+  mutate(Indicator = paste(Indicator_Name, Indicator_Type, 
+                           Sector, Unit, Source_Name, sep="|")) %>%
+  select(1:3, Indicator, starts_with("20")) %>%
+  pivot_longer(cols = starts_with("20"), 
+               names_to = "Year", 
+               values_to="Value") %>%
+  filter(!is.na(Value)) %>%
+  nest(data = -Indicator) %>%
+  separate(Indicator, sep="\\|", 
+           into = c("Indicator_Name", "Indicator_Type",
+                    "Sector","Unit","Source_Name")) 
+```
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+#While the MIMU and ACLED data have well aligned township names, the AAPP data townships are based on free text inputs.  
+#Some of the #files has a column for township, while others simply have an address (with a township embedded). To be able to merge the
+#data at the #township level, we will take an approximate matching approach.  
+
+# We can use the Levenshtein distance to find approximate matches at the township level.
+
+#' level computes the levenshtein distance between x and each y and returns
+#' the ones that are within k of the smallest value as an ordered vector. 
+#' See ?adist for details.
+#' @return data.frame of hits
+leven = function(x, y, k=0, ignore.case=T) {
+  data.frame(y=y) %>%
+    as_tibble() %>%
+    
+    # compute Levenshtein distance for string x for each y
+    mutate(distance = utils::adist(x, y, 
+                                   ignore.case=ignore.case) %>% .[1,]) %>%
+    
+    # keep y's within k of the best match
+    filter(distance <= min(distance, na.rm=T) + k) %>%
+    mutate(distance.per.char = distance/nchar(y))
+}
+
+# Use `leven` for string *vectors* `x` and `y`
+apply_leven = function(x, y, k=0, distance.threshold=0.3, ignore.case=F) {
+  data.frame(x=x) %>%
+    # get potential matches for each x as a list of tibbles
+    mutate(leven.df = map(x, ~ leven(.x, y=y,
+                                     k=k, ignore.case=ignore.case))
+    ) %>%
+    unnest(everything()) %>%
+    mutate(is.match=distance.per.char < distance.threshold) %>%
+    
+    # order by best match
+    arrange(distance.per.char) %>%
+    
+    # keep the best match per `x`
+    group_by(x) %>% 
+    slice(1) %>%  
+    ungroup() %>%
+    
+    # convert non-matches to Other
+    mutate(y = ifelse(is.match, y, "Other"))  
+}
+```
+
+
+```{r, echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+
+detainees <- detainees %>%
+  mutate(Township = str_replace_all(Address,".*,","")) %>%
+  mutate(Township = str_replace_all(Township,"T?own.*",""))
+
+```
+
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+nested.det = detainees %>% nest(data=-Township)
+nested.det %>% nrow()
+ 
+```
+
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+township.sizes = sector.nest %>% 
+  filter(Indicator_Name=="Population size", 
+         Indicator_Type=="Total", 
+         str_detect(Source_Name, "Census")) %>%
+  unnest(everything())
+
+### Use the following code
+joined.det = nested.det %>%
+  inner_join(apply_leven(nested.det$Township, 
+                         township.sizes$Township_Name,
+                         distance.threshold=0.28),
+             # 0.28 eliminates the common incorrect 
+             # match of Yangon --> Ywangan
+             by=c("Township"="x")
+  ) %>%
+  rename(detainee_township=Township, MIMU_township=y)
+joined.det
+```
+
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+joined.mimu = joined.det %>%
+  group_by(MIMU_township) %>%
+  summarise(detainees = sum(map_dbl(data,nrow)))
+
+# Use the following code to complete the merge
+joined.mimu %>%
+  left_join(township.sizes, by=c("MIMU_township"="Township_Name")) %>% 
+  select(c(MIMU_township, detainees))
+
+```
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+joined.det[['data']][1] #first township in mimu 
+```
+
+
+The following tables shows a count of detainees of the top 5 townships that it was able to match on the MIMU data set. The table also shows that detainees and detainees.per.capita is not the same per township.
+```{r,echo=FALSE}
+joined.mimu %>%
+  left_join(township.sizes, by=c("MIMU_township"="Township_Name")) %>%
+  mutate(detainees.per.1000 = detainees/Value) %>%
+  arrange(desc(detainees)) %>% head(5) %>% 
+  select(MIMU_township, detainees, detainees.per.1000)
+```
+It appears that there were several townships that could not be matched. Unmatched detainees went into a category for township called ‘other’. It appears that Monywa had the highest detainee per capita rate. 
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+detainees %>% 
+  # part (c): nesting
+  nest(data=-Township) %>%
+  # part (d): merging with the detainee_township, MIMU_township mapper
+  inner_join(apply_leven(.$Township,
+                         township.sizes$Township_Name,
+                         distance.threshold=0.28),
+             by=c("Township"="x")
+  ) %>%
+  rename(detainee_township=Township, MIMU_township=y) %>%
+  # part (e): summarise at MIMU_township level
+  group_by(MIMU_township) %>%
+  summarise(detainees = sum(map_dbl(data,nrow))) %>% 
+
+  ungroup() %>% 
+  # part (f): attach MIMU indicator and compute outcome "detainees.per.1000"
+  left_join(township.sizes, by=c("MIMU_township"="Township_Name")) %>%
+  mutate(detainees.per.1000 = detainees/Value) %>%
+  arrange(desc(detainees)) %>% head(5) %>% 
+  select(MIMU_township, detainees, detainees.per.1000)
+
+
+```
+
+
+********************************************************************************************************************
+
+
+1b)
+
+### Cleaning imprisoned data set
+
+The imprisoned table was first assigned more clear column names. The imprisoned table the Date of Arrest column had free text responses. The column was reassigned a date value based on the free text response. Lastly, the table was filtered for rows that had a sex assigned.
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+colnames(imprisoned)
+
+#assign better names with out spaces 
+names(imprisoned)[3] <- 'Sex'
+names(imprisoned)[5] <- 'FatherName'
+names(imprisoned)[7] <- 'DateOfArrest'
+names(imprisoned)[8] <- 'SectionOfLaw'
+names(imprisoned)[10] <- 'CurrentCondition'
+names(imprisoned)[13] <- 'Region/State'
+
+```
+
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+##filtering data to sex M and F values only 
+imprisoned <-  imprisoned %>%
+  filter(Sex == 'M' | Sex == 'F')
+
+```
+
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+#changing age values to numeric
+imprisoned[,4]<-sapply(imprisoned[,4],as.numeric)
+```
+
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+#changing date of arrest value, keeping the first date only with there multiple
+imprisoned <- imprisoned %>%
+  mutate(`DateOfArrest` = 
+           case_when(str_detect(`DateOfArrest`, "1-Feb-21 and\r8-Feb-21") ~ '1-Feb-21',
+                     str_detect(`DateOfArrest`, "1-Feb-21 and\r10-Feb-21") ~ '1-Feb-21',
+                     #str_detect(`DateOfArrest`, ")14-Sep-21") ~ '14-Sep-21',
+                     str_detect(`DateOfArrest`, "1e4r-sSiteyp" ) ~ '14-Sep-21',
+                     T ~ DateOfArrest)) %>%
+  select_all()
+```
+
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+nested.imp = imprisoned %>% nest(data=-Address)
+nested.imp %>% nrow()
+```
+
+
+```{r,echo=FALSE,results='hide', include=FALSE, message=FALSE, warning=FALSE}
+township.sizes = sector.nest %>% 
+  filter(Indicator_Name=="Population size", 
+         Indicator_Type=="Total", 
+         str_detect(Source_Name, "Census")) %>%
+  unnest(everything())
+
+### Use the following code
+joined.imp = nested.imp %>%
+  inner_join(apply_leven(nested.imp$Address, 
+                         township.sizes$Township_Name,
+                         distance.threshold=0.28),
+             # 0.28 eliminates the common incorrect 
+             # match of Yangon --> Ywangan
+             by=c("Address"="x")
+  ) %>%
+  rename(imprisoned_township=Address, MIMU_township=y)
+joined.imp
+```
+
+The cleaner table is as follows:
+```{r, echo=FALSE}
+imprisoned 
+```
+The imprisoned table has `r nrow(imprisoned)` rows with `r ncol(imprisoned)` columns.
+
+
+In the table below we can see that there are several columns that have many missing values. This restricts the attributes we are able utilize from this table for analysis.
+
+```{r, echo=FALSE}
+sapply(imprisoned, function(x) sum(is.na(x)))
+
+```
+
+
+
+
+
+### Merging imprisoned dataset with MIMU on township  
+Similar to the approach in the detainees table, we are using a Levenshtein distance approach. We will find approximate matches at the township level for the imprisoned ‘Township_Name’ column. This will increase consistency throughout our data sets. 
+
+Note: The imprisoned column was free text. IF during the merging of imprisoned with the MIMU data on townships, a match could not be made, it was assigned a value of ‘Other’.
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+joined.mimu.imp = joined.imp %>%
+  group_by(MIMU_township) %>%
+  summarise(imprisoned = sum(map_dbl(data,nrow)))
+
+# Use the following code to complete the merge
+joined.mimu.imp %>%
+  left_join(township.sizes, by=c("MIMU_township"="Township_Name")) %>% select(MIMU_township, imprisoned)
+```
+
+The following tables shows a count of imprisoned of the top 5 township that it was able to match on the MIMU data set. The table also shows that imprisonment and imprisoned.per.capita is not the same per township.
+```{r,echo=FALSE}
+joined.mimu.imp %>%
+  left_join(township.sizes, by=c("MIMU_township"="Township_Name")) %>%
+  mutate(imprisoned.per.1000 = imprisoned/Value) %>%
+  arrange(desc(imprisoned)) %>% head(5) %>% 
+  select(MIMU_township, imprisoned, imprisoned.per.1000)
+```
+It appears that there were several townships that could not be matched. Kayan had the highest imprisonment per capita rate. However, majority of the data could not be matched so our records are incomplete and not accurately represented. 
+
+
+*********************************************************************************************************************************
+
+1c)
+
+### Cleaning fallen dataset
+
+The fallen table was first assigned more clear column names. Then, the table was filtered for rows that had a sex assigned.
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+colnames(fallen)
+#assigning better column names 
+names(fallen)[5] <- 'FatherName'
+names(fallen)[6] <- 'DateOfIncident'
+names(fallen)[7] <- 'DeceasedDate'
+names(fallen)[9] <- 'PlaceOfIncidents'
+names(fallen)[10] <- 'HomeAddress'
+```
+
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+##filtering data to sex M and F values only 
+fallen <-  fallen %>%
+  filter(Sex == 'M' | Sex == 'F')
+```
+
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+#changing age values to numeric
+fallen[,4] <- sapply(fallen[,4],as.numeric)
+```
+
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+#checking how many rows it contains
+nested.fal = fallen %>% nest(data=-Township)
+nested.fal %>% nrow() 
+
+```
+
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+township.sizes = sector.nest %>% 
+  filter(Indicator_Name=="Population size", 
+         Indicator_Type=="Total", 
+         str_detect(Source_Name, "Census")) %>%
+  unnest(everything())
+
+### Use the following code
+joined.fal = nested.fal %>%
+  inner_join(apply_leven(nested.fal$Township, 
+                         township.sizes$Township_Name,
+                         distance.threshold=0.28),
+             # 0.28 eliminates the common incorrect 
+             # match of Yangon --> Ywangan
+             by=c("Township"="x")
+  ) %>%
+  rename(fallen_township=Township, MIMU_township=y)
+joined.fal
+```
+
+
+The cleaner table is as follows:
+```{r, echo=FALSE}
+fallen 
+```
+The fallen table has `r nrow(fallen)` rows and `r ncol(fallen)` columns.
+
+
+
+In the table below we can see that there are several columns that have many missing values. Again, this restricts the utlity of those attributes for analysis.
+
+```{r, echo=FALSE}
+#checking the number of missing values in each column
+sapply(fallen, function(x) sum(is.na(x)))
+
+```
+
+
+
+
+### Merging fallen dataset with MIMU on township  
+
+Similar to the approach used in the previous tables, a Levenshtein distance approach we will find approximate matches at the township level for the fallen ‘Township_Name’ column. This will increase consistency throughout our data sets. 
+
+Note: Since the fallen column was free text, during the merge with MIMU townships some values could not be matched and were given the value ‘Other’.
+
+The following tables shows a count of fallen for the top 5 townships that was able to match on the MIMU dataset. The table also shows that fallen and fallen.per.capita is not the same per township.
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+joined.mimu.fal = joined.fal %>%
+  group_by(MIMU_township) %>%
+  summarise(fallen = sum(map_dbl(data,nrow)))
+
+# Use the following code to complete the merge
+joined.mimu.fal %>%
+  left_join(township.sizes, by=c("MIMU_township"="Township_Name")) %>% select(MIMU_township, fallen)
+```
+
+
+```{r,echo=FALSE}
+joined.mimu.fal %>%
+  left_join(township.sizes, by=c("MIMU_township"="Township_Name")) %>%
+  mutate(fallen.per.1000 = fallen/Value) %>%
+  arrange(desc(fallen)) %>% head(5) %>% 
+  select(MIMU_township, fallen, fallen.per.1000)
+```
+There were several records that could not be matched on township. As a result, our rates may be inaccurately represented. Kani had the greatest fallen per capita rate. 
+
+
+The boxplot below represents a summary of the ages of those in the fallen data set with a mean of 32 and median of 30.The outliers are all at the high end and account for the mild rightward skew.
+```{r, echo=FALSE}
+
+fallen.age <- fallen %>%  # Apply filter & is.na
+  filter(!is.na(Age))
+
+boxplot(fallen.age$Age,
+        main = 'Age of fallen', 
+        ylab = 'age')
+```
+
+```{r, echo=FALSE}
+summary(fallen.age$Age)
+
+```
+
+
+
+```{r,echo=FALSE, results='hide', include=FALSE, message=FALSE, warning=FALSE}
+# merging the detainees and fallen dataset on matching townships
+det.fall.nest <- merge(nested.det, nested.fal, by="Township")
+```
+
+### Merging MIMU and conflicts dataset on MIMU township
+The following table merged conflicts and MIMU based on township. 
+
+Based on our research question we will pull indicators to give us more attributes about the townships for analysis.
+```{r, echo=FALSE}
+sector.nest
+```
+
+The following are the column names in the merged dataset between conflicts and MIMU township:
+```{r, echo=FALSE}
+colnames(sector.nest)
+```
+********************************************************************************************************************************************
+
+## Results
+
+1. Temporal evaluation of detainees, imprisoned, fallen, and conflicts.
+
+As can be seen in the tables below, the incidence of detainment, imprisonment and death was highest in March 2021 and tapers off following that.
+
+
+### Detainees
+```{r, echo=FALSE}
+
+detainees.dateofarrest <- subset(detainees, !is.na(detainees$DateOfArrest))
+
+  
+month.det <- detainees.dateofarrest %>% mutate(month.of.detainment = case_when(
+  str_detect(`DateOfArrest`,"Jan") ~ 'January',
+  str_detect(`DateOfArrest`,"Mar") ~ 'March',
+  str_detect(`DateOfArrest`,"Apr") ~ 'April',
+  str_detect(`DateOfArrest`,"May") ~ 'May',
+  str_detect(`DateOfArrest`,"Jun") ~ 'June',
+  str_detect(`DateOfArrest`,"Jul") ~ 'July',
+  str_detect(`DateOfArrest`,"Aug") ~ 'August',
+  str_detect(`DateOfArrest`, 'Feb') ~ 'February',
+  str_detect(`DateOfArrest`,"Sep") ~ 'September',
+  str_detect(`DateOfArrest`,"Oct") ~ 'October',
+  str_detect(`DateOfArrest`,"Nov") ~ 'November',
+  str_detect(`DateOfArrest`,"Dec") ~ 'December',
+  T ~ `DateOfArrest`)) %>% select_all()
+
+month.fact <- month.det %>%
+  mutate(month.of.detainment = factor(month.of.detainment, 
+                        levels = c("January", "February", "March", "April", "May", 
+                                   "June", "July", "August", "September", "October", "November", "December")))
+
+```
+
+
+The table below shows a count of detainment per month broken down by sex:
+```{r, echo=FALSE,message=FALSE, warning=FALSE}
+month.cnt <- month.fact %>% group_by(month.of.detainment, Sex) %>% summarise(count1 = n()) %>%
+  mutate(count = sum(count1)) %>%
+ pivot_wider(names_from = Sex, values_from = count1) 
+
+month.cnt
+```
+March has the highest count of detainees with `r month.cnt[[2]][2]` individuals detained. 
+
+
+### Imprisoned
+
+```{r, echo=FALSE}
+imprisoned.dateofarrest <- subset(imprisoned, !is.na(imprisoned$DateOfArrest))
+
+imprisoned.dateofarrest <- imprisoned.dateofarrest %>% 
+  filter(!str_detect(DateOfArrest, 'Unknown'))
+  
+month.imp <- imprisoned.dateofarrest %>% mutate(month.imprisoned = case_when(
+  str_detect(`DateOfArrest`,"Jan") ~ 'January',
+  str_detect(`DateOfArrest`,"Mar") ~ 'March',
+  str_detect(`DateOfArrest`,"Apr") ~ 'April',
+  str_detect(`DateOfArrest`,"May") ~ 'May',
+  str_detect(`DateOfArrest`,"Jun") ~ 'June',
+  str_detect(`DateOfArrest`,"Jul") ~ 'July',
+  str_detect(`DateOfArrest`,"Aug") ~ 'August',
+  str_detect(`DateOfArrest`, 'Feb') ~ 'February',
+  str_detect(`DateOfArrest`,"Sep") ~ 'September',
+  str_detect(`DateOfArrest`,"Oct") ~ 'October',
+  str_detect(`DateOfArrest`,"Nov") ~ 'November',
+  str_detect(`DateOfArrest`,"Dec") ~ 'December',
+  T ~ `DateOfArrest`)) %>% select_all()
+
+month.imp.fact <- month.imp %>%
+  mutate(month.imprisoned = factor(month.imprisoned, 
+                        levels = c("January", "February", "March", "April", "May", 
+                                   "June", "July", "August", "September", "October", "November", "December")))
+```
+
+The table below shows a count of imprisoned per month broken down by sex:
+```{r, echo=FALSE,message=FALSE, warning=FALSE}
+month.imp.cnt <- month.imp.fact %>% group_by(month.imprisoned, Sex) %>% summarise(count1 = n()) %>%
+  mutate(count = sum(count1)) %>%
+ pivot_wider(names_from = Sex, values_from = count1) 
+
+month.imp.cnt
+
+```
+March has the highest count of imprisoned with `r month.imp.cnt[[2]][2]` individuals imprisoned.
+
+
+
+### Fallen
+```{r, echo=FALSE}
+fallen.deceased <- subset(fallen, !is.na(fallen$DeceasedDate))
+
+fallen.deceased <- fallen.deceased %>% 
+  filter(!str_detect(DeceasedDate, "Myinthar Village")) %>% filter(!str_detect(DeceasedDate, "In The House")) %>%
+  filter(!str_detect(DeceasedDate, "On the Forest\rPath")) %>% filter(!str_detect(DeceasedDate, "Civilian")) %>%
+  filter(!str_detect(DeceasedDate, "Daydanaw Village"))
+  
+month.fallen <- fallen.deceased %>% mutate(fallen.month = case_when(
+  str_detect(`DeceasedDate`,"Jan") ~ 'January',
+  str_detect(`DeceasedDate`,"Mar") ~ 'March',
+  str_detect(`DeceasedDate`,"Apr") ~ 'April',
+  str_detect(`DeceasedDate`,"May") ~ 'May',
+  str_detect(`DeceasedDate`,"Jun") ~ 'June',
+  str_detect(`DeceasedDate`,"Jul") ~ 'July',
+  str_detect(`DeceasedDate`,"Aug") ~ 'August',
+  str_detect(`DeceasedDate`, 'Feb') ~ 'February',
+  str_detect(`DeceasedDate`,"Sep") ~ 'September',
+  str_detect(`DeceasedDate`,"Oct") ~ 'October',
+  str_detect(`DeceasedDate`,"Nov") ~ 'November',
+  str_detect(`DeceasedDate`,"Dec") ~ 'December',
+  T ~ `DeceasedDate`)) %>% select_all()
+
+month.fall.fact <- month.fallen %>%
+  mutate(fallen.month = factor(fallen.month, 
+                        levels = c("January", "February", "March", "April", "May", 
+                                   "June", "July", "August", "September", "October", "November", "December")))
+```
+
+The table below shows a count of those fallen per month broken down by sex:
+```{r, echo=FALSE,message=FALSE, warning=FALSE}
+month.fallen.cnt <- month.fall.fact%>% group_by(fallen.month, Sex) %>% summarise(count1 = n()) %>%
+  mutate(count = sum(count1)) %>%
+ pivot_wider(names_from = Sex, values_from = count1) 
+
+month.fallen.cnt
+```
+March has the highest count of imprisoned with `r month.fallen.cnt[[2]][2]` individuals imprisoned.
+
+
+### Conflicts
+
+```{r, echo=FALSE}
+#Choosing certain columns (only required) of the dataset
+conflicts = conflicts[-c(which(conflicts$event_type != 'Protests' & conflicts$event_type != 'Violence against civilians' & conflicts$event_type != 'Riots')),]
+
+conflicts = conflicts[-c(6, 9, 15, 16, 18)]
+```
+
+
+```{r, echo=FALSE}
+#Removing NA values from admin3 to retain only valid townships
+conflicts = conflicts[!is.na(conflicts$admin3),]
+```
+
+
+```{r, echo=FALSE}
+conflicts2 = conflicts %>% inner_join(joined.mimu, by=c("admin3" = "MIMU_township")) %>% mutate(month.of.event = case_when( str_detect(`event_date`,"Jan") ~ 'January',
+                                     str_detect(`event_date`,"Mar") ~ 'March',
+                                     str_detect(`event_date`,"Apr") ~ 'April',
+                                     str_detect(`event_date`,"May") ~ 'May',
+                                     str_detect(`event_date`,"Jun") ~ 'June',
+                                     str_detect(`event_date`,"Jul") ~ 'July',
+                                     str_detect(`event_date`,"Aug") ~ 'August',
+                                     str_detect(`event_date`, 'Feb') ~ 'February',
+                                     str_detect(`event_date`,"Sep") ~ 'September',
+                                     str_detect(`event_date`,"Oct") ~ 'October',
+                                     str_detect(`event_date`,"Nov") ~ 'November',
+                                     str_detect(`event_date`,"Dec") ~ 'December',
+                                     T ~ `event_date`))
+conflicts2 <- conflicts2 %>%
+  mutate(month.of.event = factor(month.of.event, 
+                        levels = c("January", "February", "March", "April", "May", 
+                                   "June", "July", "August", "September", "October", "November", "December")))
+
+
+
+```
+
+
+
+```{r, echo=FALSE}
+conflict.mnth <- conflicts2 %>% group_by(conflicts2$month.of.event) %>% summarise(count = n())
+
+names(conflict.mnth)[1] <- 'conflicts.by.month'
+
+conflict.mnth <- conflict.mnth %>%
+  mutate(conflicts.by.month = factor(conflicts.by.month, 
+                        levels = c("January", "February", "March", "April", "May", 
+                                   "June", "July", "August", "September", "October", "November", "December")))
+
+
+con.mon.det <- conflict.mnth %>% left_join(month.cnt, by= c("conflicts.by.month"= "month.of.detainment")) %>% left_join(month.fallen.cnt, by=c("conflicts.by.month"="fallen.month")) %>% left_join(month.imp.cnt, by=c("conflicts.by.month"="month.imprisoned"))
+
+
+names(con.mon.det)[2] <- 'conflicts.cnt'
+names(con.mon.det)[3] <- 'detainee.cnt'
+names(con.mon.det)[6] <- 'fallen.cnt'
+names(con.mon.det)[9] <- 'imprisoned.cnt'
+
+
+combined <- select(con.mon.det, conflicts.by.month, conflicts.cnt, detainee.cnt, fallen.cnt, imprisoned.cnt)
+combined
+
+
+```
+
+
+
+The conflicts peaked around February and March with `r combined[[2]][2]`and `r combined[[2]][3]` conflicts respectively. 
+
+********************************************************************************************************************************************
+
+
+2. Univariate analyses
+
+### Urban population as percentage
+```{r, echo=FALSE}
+	
+Urban.Pop.Pcnt.of.Tot.Pop <- sector.nest[[6]][[147]] %>% inner_join(joined.det, by=c("Township_Name" = "MIMU_township"))
+
+
+urban.pop <- Urban.Pop.Pcnt.of.Tot.Pop %>% group_by(Township_Name) %>% select(Township_Name, Value)
+
+boxplot(urban.pop$Value, data=urban.pop, main="Distribution of Percent Urban Population",
+   xlab="urban population", ylab="% urban population")
+
+```
+```{r, echo=FALSE}
+urban.sum <- summary(urban.pop$Value)
+urban.sum
+```
+The percent of urban literacy was the second thing we evaluated. Please refer to the table above.
+
+
+### Adult Literacy Rate
+```{r, echo=FALSE, results='hide',message=FALSE, warning=FALSE}
+adult.literacy.rate <- sector.nest[[6]][[233]] %>% inner_join(joined.det, by=c("Township_Name" = "MIMU_township"))
+
+
+sector.nest[[6]][[233]] %>% 
+  group_by(Township_Name) %>% summarise(literacy.rate = Value) %>%
+  summarise(Township_Name, literacy.rate)
+
+```
+
+```{r, echo=FALSE}
+adult.lit <- adult.literacy.rate %>% group_by(Township_Name) %>% select(Township_Name, Value)
+
+boxplot(adult.lit$Value, data=adult.lit, main="Distribution of Percent Adult Literacy",
+   xlab="general population", ylab="% literacy rate")
+```
+
+```{r, echo=FALSE}
+adult.sum <- summary(adult.lit$Value)
+adult.sum
+```
+The percent of adult literacy was the first thing evaluated. Please refer to the table above.
+
+
+```{r, echo=FALSE}
+ttesturbdata = sector.nest[[6]][[147]] %>% mutate(Urban.Y.N = case_when(Value <= 30 ~ "No",Value >30 ~ "Yes"))
+```
+
+```{r, echo=FALSE}
+ttestdata = ttesturbdata %>% inner_join(joined.mimu, by=c("Township_Name" = "MIMU_township"))
+
+```
+
+
+```{r, echo=FALSE}
+ggdatacat = ttesturbdata %>% inner_join(sector.nest[[6]][[233]],by = c("Township_Name" = "Township_Name")) %>% inner_join(joined.mimu, by=c("Township_Name" = "MIMU_township"))
+lmcat1 = lm(formula = detainees ~ Urban.Y.N+Value.y, data = ggdatacat)
+summary(lmcat1)
+```
+
+
+
+### Testing the difference in means based on for urban percent population using t-test
+
+```{r, echo=FALSE}
+t.test <- t.test(detainees ~ Urban.Y.N, data = ttestdata)
+t.test 
+```
+```{r, echo=FALSE}
+qplot(data = ttestdata, x = detainees, fill = Urban.Y.N, geom = "density", alpha = I(0.5),xlab = "Detainees")
+```
+
+
+********************************************************************************************************************************************
+
+
+3. Bivariate analysis
+
+A linear regression was performed on per capita detainment against adult literacy rate. This demonstrated that the
+
+A linear regression was then performed on per capita detainment against percent of urban population in a township. This demonstrated that the 
+
+### Detainees against Adult Literacy Rate
+```{r, echo=FALSE}
+ALR = sector.nest[[6]][[233]] %>% inner_join(joined.mimu, by=c("Township_Name" = "MIMU_township"))
+
+lm1 = lm(formula =  detainees ~ Value , data = ALR)
+
+lm.summary <- summary(lm1)
+lm.summary
+
+```
+There is a statistically significant, positive correlation between adult literacy rate and detainees per capita with a t-value of `r lm.summary$coefficients[2,3]` and a p-value of `r lm.summary$coefficients[2,4]`.
+
+
+```{r, echo=FALSE}
+plot(ALR$Value,ALR$detainees, main= "Linear regression on adult literacy",xlab = "Adult literacy rate", ylab = "Detainees per capita")
+abline(lm1)
+
+
+```
+
+
+## Detainees against Percent Urban population
+
+```{r, echo=FALSE}
+
+ggdata12 = sector.nest[[6]][[147]] %>% inner_join(joined.mimu, by=c("Township_Name" = "MIMU_township"))
+
+lm3 = lm(formula =  detainees ~ Value, data = ggdata12)
+
+```
+
+
+```{r, echo=FALSE}
+lm3.summary <- summary(lm3)
+lm3.summary
+```
+There is a statistically significant, positive correlation between adult literacy rate and detainees per capita with a t-value of `r lm3.summary$coefficients[2,3]` and a p-value of `r lm3.summary$coefficients[2,4]`.
+
+
+```{r, echo=FALSE}
+plot(ggdata12$Value, ggdata12$detainees, main= "Linear regression on percent urban population",xlab = "Percent urban population", ylab = "Detainees per capita")
+abline(lm3)
+```
+
+
+********************************************************************************************************************************************
+
+
+4. Trivariate analysis
+
+### Urban households and Adult literacy rate
+
+```{r, echo=FALSE} 
+ggdata1 = sector.nest[[6]][[147]] %>% inner_join(sector.nest[[6]][[233]],by = c("Township_Name" = "Township_Name")) %>% inner_join(joined.mimu, by=c("Township_Name" = "MIMU_township"))
+
+lm2 = lm(detainees ~ Value.x+Value.y, data = ggdata1)
+
+lm2.summary <- summary(lm2)
+lm2.summary
+```
+There is a statistically significant, positive correlation between adult literacy rate and detainees per capita with a t-value of `r lm2.summary$coefficients[2,3]` and a p-value of `r lm2.summary$coefficients[2,4]`.
+
+
+```{r, echo=FALSE}
+ggplot(ggdatacat, aes(x=Value.y, y=detainees, shape=Urban.Y.N, color=Urban.Y.N)) + geom_point()
+```
+
+
+A linear regression was performed using per capita detainment against the predictors (adult literacy rate and percent of urban population in a township), refer to summary (see figure) and table (see figure). The higher literacy rate and higher urban population correlated positively with detainment per capita with B values of (.1969 and .1095), t-values of (5.741 and 1.074) and p-values are miniscule and .284 respectively. In this analysis, only the percent of urban population was found to be statistically significant.
+
+
+
+
+### correlation
+```{r, echo=FALSE}
+ggcordata = select(ggdata1,Value.x,Value.y,detainees)
+```
+
+```{r, echo=FALSE}
+mydata.cor = cor(ggcordata, method = c("spearman"))
+mydata.cor
+```
+
+
+********************************************************************************************************************************************
+
+
+
+## Discussion
+
+Our analysis spans several considerations and begins with establishing a storyline of events.
+
+The coup occurred on 2/1/2021. A review of the data including those from the detainees, imprisoned, fallen and conflicts tables reveals a consistent pattenr of events that makes sense temporally.
+
+In ALL of those instances, the number of people detained, imprisoned, killed and the number of conflicts all peaked in March. Essentially, this tells the story of how the news of the coup took time to propogate and marshaling a resistance to the coup required this slight lag. Shortly thereafter, the number of conflicts increases. Predictably, in the resulting suppression of the protestations of the coup, the number of people detained, imprisoned or killed perfectly mirrors the number of conflicts. This can be seen at a glance referring to Tables 1-4 from our results.
+
+We suspected that adult literacy rate and urbanization would prove to be surrogates for informed citizenry and suspected such citizens would become a source of resistance to the coup. So, we posed the question whether or not these factors would prove to have any impact on the detainment per capita.
+
+To evaluate this, we first performed a T-test to evaluate whether there was no difference in the detainment per capita among urban vs non-urban populations (the null hypothesis). We set a threshold of 50% of the population in a township living in an urban center would be classified as "urban". If it were less than 50%, it was classified as "not urban" (see Figure 2). Our results indicated that the detainment per capita increased from 5.088 in non-urban centers to 21.034 in urban centers. Even a casual inspection would suggest that th
+
+This was statistically significant with a t value of -5.5475 and p value of 6.792e-7. Consequently, we rejected the null hypothesis because there is a statistically significant difference in detainment per capita in urban population centers.
+
+Next, we performed linear regressions on both adult literacy rate and on the percent of the population living in urban centers to provide a more granular evaluation.
+
+For the linear regression on adult literacy rate, the increased rate of detainment per capita was 0.25 for every percent increase in adult literacy. This was found to be statistically significant with an F-statistic of 5.445 and a p-value of 0.0208. Please refer to the graph in Figure 3. This showed that as literacy rate increased, detainment rate increased. This is not to be confused with adult literacy being causal to detainment rate.
+
+For the linear regression on percent population in urban centers, the increased rate of detainment per capita was 0.204 for every percent increase in people living in an urban population center. This was found to be statistically significant with an F-statistic of 37.044 and a p-value of that is miniscule. Please refer to the graph in Figure 4. This showed that as percent of people living in an urban center increased, detainment rate increased. Again, this should not be confused as a causal relationship.
+
+Next we performed a scatter plot reviewing the distribution of detainees per capita when measured against adult literacy rate and a categorical variable of 'urban' vs 'not-urban'. In this evaluation, we found that while both variables had a positive correlation with detainees per capita, only the 'urban.y.n' was statistically significant.
+
+The temporal story of the coup follows a predictable/understandable timeline. There is a slight lag before conflicts, detainment, imprisonment and death occurs following the coup which peaks in March 2021. The conflicts appear to taper off after May. The numbers detained, imprisoned or killed also tapers off after March.
+
+The story the data tells is that those citizens of Myanmar who were likely to be informed and live in cities were likely to be involved in a resistance or protest the coup. We used surrogate markers to find this information. An alternate explanation is that in rural areas, people are possibly able to evade capture from the military. So, it is important to consider alternate explanations.
+
+But, it is important to note the limitations of our information. This starts with the substantial deficits of information with nearly 2/3 of the detainees data missing information or that we were not able to use because we could not reliably identify which town they came from. Township information on which we could aggregate was limited by the free text found in the Address columns of detainees and imprisoned. Our workaround was to label those which we could not definitively identify the township by putting them in the category called "other". This DID allow us to work with the data, but it cost us substantial amounts of data (nearly 2/3 of the data from the detainees table).
+
+We felt that the absence of age data and the inconsistent recording of sex data was inconsequential for the questions we were asking.
+
+So, in the final tally, we were able to find some useful information by carefully selecting the data we could work with while not being penalized for data that was never recorded (sex, age, etc). However, we were limited by the inability to definitively localize many of those detainees and imprisoned to their respective townships. This might drastically alter the conclusions we were able to derive. Perhaps many of those nearly 5000 records we could not use from the detainees data might have altered the detainees per capita in rural areas? It is impossible to know.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
